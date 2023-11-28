@@ -24,6 +24,7 @@
 
 import React, {
   forwardRef,
+  useEffect,
   useMemo,
   useState,
   useCallback,
@@ -41,10 +42,11 @@ import {
   ModalProps,
 } from 'react-native';
 
-import WebView, {WebViewMessageEvent, WebViewProps} from 'react-native-webview';
-import getTemplate, {RecaptchaSize, RecaptchaTheme} from './get-template';
-import {OnShouldStartLoadWithRequest} from 'react-native-webview/lib/WebViewTypes';
+import WebView, { WebViewMessageEvent, WebViewProps } from 'react-native-webview';
+import getTemplate, { RecaptchaSize, RecaptchaTheme } from './get-template';
+import { OnShouldStartLoadWithRequest } from 'react-native-webview/lib/WebViewTypes';
 import {
+  GetToken,
   MessageReceivedPayload,
   isPayloadClose,
   isPayloadError,
@@ -248,6 +250,17 @@ const Recaptcha = forwardRef<RecaptchaRef, RecaptchaProps>(
       hideBadge,
     ]);
 
+    const $promiseToken = useRef<{
+      resolve: (value: GetToken | PromiseLike<GetToken>) => void;
+      reject: (arg: any) => void;
+    } | null>(null)
+
+    const onOpen = useCallback(() => {
+      setVisible(true);
+      setLoading(true);
+      $isClosed.current = false;
+    }, [$isClosed.current]);
+
     const handleLoad = useCallback(() => {
       onLoad?.();
 
@@ -270,37 +283,73 @@ const Recaptcha = forwardRef<RecaptchaRef, RecaptchaProps>(
     }, [onClose]);
 
     const handleMessage = useCallback(
-      (event: WebViewMessageEvent) => {
+      (content) => {
         try {
-          const payload = JSON.parse(
-            event.nativeEvent.data,
-          ) as MessageReceivedPayload;
-
-          if (isPayloadClose(payload) && isInvisibleSize) {
+          const payload = JSON.parse(content.nativeEvent.data);
+          if (payload.close) {
+            if (isInvisibleSize) {
+              handleClose();
+            }
+          }
+          if (payload.load) {
+            handleLoad(...payload.load);
+          }
+          if (payload.expire) {
+            //@ts-ignore
+            onExpire?.(...payload.expire);
+          }
+          if (payload.error) {
             handleClose();
-          }
-          if (isPayloadLoad(payload)) {
-            handleLoad();
-          }
-          if (isPayloadExpire(payload)) {
-            onExpire?.();
-          }
-          if (isPayloadError(payload)) {
-            handleClose();
+            //@ts-ignore
             onError?.(...payload.error);
+            $promiseToken?.current?.reject(payload.error);
           }
-          if (isPayloadVerify(payload)) {
+          if (payload.verify) {
             handleClose();
+            //@ts-ignore
             onVerify?.(...payload.verify);
+            const token = payload?.verify?.[0] || '';
+            $promiseToken?.current?.resolve({ token: token });
           }
         } catch (err) {
-          if ('__DEV__' in global && __DEV__) {
-            console.warn(err);
-          }
+          $promiseToken?.current?.reject(err);
         }
       },
-      [onVerify, onExpire, onError, handleClose, handleLoad, isInvisibleSize],
+      [onVerify, onExpire, onError, handleClose, handleLoad, isInvisibleSize]
     );
+
+    // const handleMessage = useCallback(
+    //   (event: WebViewMessageEvent) => {
+    //     try {
+    //       const payload = JSON.parse(
+    //         event.nativeEvent.data,
+    //       ) as MessageReceivedPayload;
+
+    //       if (isPayloadClose(payload) && isInvisibleSize) {
+    //         handleClose();
+    //       }
+    //       if (isPayloadLoad(payload)) {
+    //         handleLoad();
+    //       }
+    //       if (isPayloadExpire(payload)) {
+    //         onExpire?.();
+    //       }
+    //       if (isPayloadError(payload)) {
+    //         handleClose();
+    //         onError?.(...payload.error);
+    //       }
+    //       if (isPayloadVerify(payload)) {
+    //         handleClose();
+    //         onVerify?.(...payload.verify);
+    //       }
+    //     } catch (err) {
+    //       if ('__DEV__' in global && __DEV__) {
+    //         console.warn(err);
+    //       }
+    //     }
+    //   },
+    //   [onVerify, onExpire, onError, handleClose, handleLoad, isInvisibleSize],
+    // );
 
     const source = useMemo(
       () => ({
@@ -313,14 +362,18 @@ const Recaptcha = forwardRef<RecaptchaRef, RecaptchaProps>(
     useImperativeHandle(
       $ref,
       () => ({
-        open: () => {
-          setVisible(true);
-          setLoading(true);
-          $isClosed.current = false;
-        },
+        open: onOpen,
         close: handleClose,
+        getToken: () => {
+          onOpen();
+          return new Promise<GetToken>(
+            (resolve, reject: (arg: any) => void) => {
+              $promiseToken.current = { resolve, reject };
+            }
+          );
+        },
       }),
-      [handleClose],
+      [handleClose, onOpen],
     );
 
     const handleNavigationStateChange = useCallback(() => {
@@ -338,6 +391,12 @@ const Recaptcha = forwardRef<RecaptchaRef, RecaptchaProps>(
 
     const webViewStyles = useMemo(() => [styles.webView, style], [style]);
 
+    useEffect(() => {
+      return () => {
+        $promiseToken.current = null;
+      };
+    }, []);
+
     const renderLoading = () => {
       if (!loading && source) {
         return null;
@@ -348,6 +407,23 @@ const Recaptcha = forwardRef<RecaptchaRef, RecaptchaProps>(
         </View>
       );
     };
+
+    if (isInvisibleSize && visible) {
+      return (
+        <WebView
+          bounces={false}
+          allowsBackForwardNavigationGestures={false}
+          originWhitelist={originWhitelist}
+          onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
+          onNavigationStateChange={handleNavigationStateChange}
+          {...webViewProps}
+          source={source}
+          style={webViewStyles}
+          onMessage={handleMessage}
+          ref={$webView}
+        />
+      )
+    }
 
     return (
       <Modal

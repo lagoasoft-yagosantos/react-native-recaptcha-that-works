@@ -49,6 +49,10 @@ export type MessageReceivedPayload =
   | PayloadExpire
   | PayloadVerify;
 
+export type GetToken = {
+  token: string;
+}
+
 export const isPayloadClose = (
   payload: MessageReceivedPayload,
 ): payload is PayloadClose => {

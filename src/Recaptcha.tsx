@@ -76,6 +76,7 @@ const originWhitelist = ['*'];
 export type RecaptchaRef = {
   open(): void;
   close(): void;
+  getToken(): GetToken;
 };
 
 export type RecaptchaProps = {

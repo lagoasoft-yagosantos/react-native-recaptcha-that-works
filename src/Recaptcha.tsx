@@ -69,6 +69,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  invisibleStyle: {
+    backgroundColor: 'transparent',
+    position: 'absolute',
+    width: 0,
+    height: 0,
+  }
 });
 
 const originWhitelist = ['*'];
@@ -411,18 +417,20 @@ const Recaptcha = forwardRef<RecaptchaRef, RecaptchaProps>(
 
     if (isInvisibleSize && visible) {
       return (
-        <WebView
-          bounces={false}
-          allowsBackForwardNavigationGestures={false}
-          originWhitelist={originWhitelist}
-          onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
-          onNavigationStateChange={handleNavigationStateChange}
-          {...webViewProps}
-          source={source}
-          style={webViewStyles}
-          onMessage={handleMessage}
-          ref={$webView}
-        />
+        <View style={styles.invisibleStyle}>
+          <WebView
+            bounces={false}
+            allowsBackForwardNavigationGestures={false}
+            originWhitelist={originWhitelist}
+            onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
+            onNavigationStateChange={handleNavigationStateChange}
+            {...webViewProps}
+            source={source}
+            style={webViewStyles}
+            onMessage={handleMessage}
+            ref={$webView}
+          />
+        </View>
       )
     }
 

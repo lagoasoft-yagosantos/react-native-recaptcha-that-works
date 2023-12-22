@@ -36,6 +36,9 @@
     "react-native": ">=0.60",
     "react-native-webview": ">=10"
   },
+  "dependencies": {
+    "use-latest-callback": "^0.1.9"
+  },
   "devDependencies": {
     "@babel/core": "^7.20.0",
     "@babel/preset-env": "^7.20.0",
